@@ -40,8 +40,55 @@ export function initAuth(onLogin) {
     document.getElementById('userBadge').style.display = 'flex';
     db = firebase.firestore();
     setStatus('sync', 'Chargement...');
-    loadFirebase().then(function () { onLogin(user); });
+    ensureUserDoc(user)
+      .then(function () { return loadFirebase(); })
+      .then(function () { onLogin(user); });
   });
+}
+
+// Crée la fiche Firestore de l'utilisateur à sa toute première connexion (email,
+// rôle vide), ou met à jour sa date de dernière connexion si elle existe déjà.
+// Le tout premier utilisateur jamais connecté sur l'appli est promu Administrateur
+// automatiquement, pour amorcer la gestion des rôles sans intervention manuelle.
+async function ensureUserDoc(user) {
+  var ref = db.collection('users').doc(user.uid);
+  try {
+    var snap = await ref.get();
+    if (!snap.exists) {
+      var existing = await db.collection('users').limit(1).get();
+      var isFirstEver = existing.empty;
+      await ref.set({
+        email: user.email,
+        role: isFirstEver ? 'Administrateur' : '',
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString()
+      });
+    } else {
+      await ref.update({ lastLogin: new Date().toISOString(), email: user.email });
+    }
+    var finalSnap = await ref.get();
+    var data = finalSnap.data();
+    state.currentUserUid = user.uid;
+    state.currentUserEmail = data.email || user.email;
+    state.currentUserRole = data.role || '';
+  } catch (e) {
+    console.error('Erreur ensureUserDoc', e);
+    state.currentUserUid = user.uid;
+    state.currentUserEmail = user.email;
+    state.currentUserRole = '';
+  }
+}
+
+// Liste tous les profils utilisateurs (pour l'onglet Utilisateurs, réservé aux Administrateurs).
+export async function loadUsersList() {
+  var snap = await db.collection('users').orderBy('email').get();
+  return snap.docs.map(function (d) { return Object.assign({ uid: d.id }, d.data()); });
+}
+
+// Met à jour le rôle d'un utilisateur donné.
+export async function updateUserRole(uid, role) {
+  await db.collection('users').doc(uid).update({ role: role });
+  if (uid === state.currentUserUid) state.currentUserRole = role;
 }
 
 export async function loadFirebase() {
