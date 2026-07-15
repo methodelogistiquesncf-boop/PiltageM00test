@@ -50,23 +50,35 @@ export function initAuth(onLogin) {
 // rôle vide), ou met à jour sa date de dernière connexion si elle existe déjà.
 // Le tout premier utilisateur jamais connecté sur l'appli est promu Administrateur
 // automatiquement, pour amorcer la gestion des rôles sans intervention manuelle.
+//
+// Détection du "premier utilisateur" via un document sentinelle meta/bootstrap
+// plutôt qu'une requête list() sur la collection users : un nouvel utilisateur
+// n'est pas encore admin au moment de cette vérification, donc un list() serait
+// refusé par les règles de sécurité (allow list: if isAdmin()). Un get() sur un
+// document précis, lui, reste autorisé.
 async function ensureUserDoc(user) {
-  var ref = db.collection('users').doc(user.uid);
+  var userRef = db.collection('users').doc(user.uid);
+  var bootstrapRef = db.collection('meta').doc('bootstrap');
   try {
-    var snap = await ref.get();
-    if (!snap.exists) {
-      var existing = await db.collection('users').limit(1).get();
-      var isFirstEver = existing.empty;
-      await ref.set({
+    await db.runTransaction(async function (tx) {
+      var userSnap = await tx.get(userRef);
+      if (userSnap.exists) {
+        tx.update(userRef, { lastLogin: new Date().toISOString(), email: user.email });
+        return;
+      }
+      var bootSnap = await tx.get(bootstrapRef);
+      var isFirstEver = !bootSnap.exists;
+      tx.set(userRef, {
         email: user.email,
         role: isFirstEver ? 'Administrateur' : '',
         createdAt: new Date().toISOString(),
         lastLogin: new Date().toISOString()
       });
-    } else {
-      await ref.update({ lastLogin: new Date().toISOString(), email: user.email });
-    }
-    var finalSnap = await ref.get();
+      if (isFirstEver) {
+        tx.set(bootstrapRef, { adminAssigned: true, assignedTo: user.uid, assignedAt: new Date().toISOString() });
+      }
+    });
+    var finalSnap = await userRef.get();
     var data = finalSnap.data();
     state.currentUserUid = user.uid;
     state.currentUserEmail = data.email || user.email;
