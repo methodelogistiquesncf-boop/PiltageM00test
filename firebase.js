@@ -58,6 +58,7 @@ export async function loadFirebase() {
       if (data.historique) patch.historique = data.historique;
       if (data.colOrder) patch.colOrder = data.colOrder;
       if (data.rassemblement) patch.rassemblement = data.rassemblement;
+      if (data.actions) patch.actions = data.actions;
       setState(patch);
       if (data.dateJour) document.getElementById('dateJour').value = data.dateJour;
       setStatus('ok', '✓ Synchronisé');
@@ -95,6 +96,7 @@ export async function saveFirebase() {
     historique: state.historique,
     colOrder: state.colOrder,
     rassemblement: state.rassemblement,
+    actions: state.actions,
     dateJour: dateJour,
     savedAt: new Date().toISOString()
   };
@@ -133,6 +135,7 @@ export function loadLocal() {
     if (data.historique) patch.historique = data.historique;
     if (data.colOrder) patch.colOrder = data.colOrder;
     if (data.rassemblement) patch.rassemblement = data.rassemblement;
+    if (data.actions) patch.actions = data.actions;
     setState(patch);
     if (data.dateJour) document.getElementById('dateJour').value = data.dateJour;
   } catch (e) { console.error(e); }
