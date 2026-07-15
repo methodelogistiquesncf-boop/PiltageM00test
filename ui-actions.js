@@ -11,6 +11,7 @@ function makeActionItem(data) {
   return {
     id: 'act_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     engin: data.engin || '',
+    poste: data.poste || '',
     section: data.section || '',
     date: data.date || '',
     jour: data.jour || '',
@@ -97,7 +98,7 @@ export function buildActions() {
   var table = document.createElement('table');
   table.className = 'actions-table';
   var thead = document.createElement('thead');
-  thead.innerHTML = '<tr><th>Engin</th><th>Section</th><th>Date</th><th>Repère</th><th>Action</th><th>Fait</th><th></th></tr>';
+  thead.innerHTML = '<tr><th>Engin</th><th>Poste</th><th>Section</th><th>Date</th><th>Repère</th><th>Action</th><th>Fait</th><th></th></tr>';
   table.appendChild(thead);
 
   var tbody = document.createElement('tbody');
@@ -111,6 +112,7 @@ function buildActionRow(a) {
   if (a.done) tr.className = 'action-done';
 
   var tdEngin = document.createElement('td'); tdEngin.textContent = a.engin; tr.appendChild(tdEngin);
+  var tdPoste = document.createElement('td'); tdPoste.textContent = a.poste || '—'; tr.appendChild(tdPoste);
   var tdSection = document.createElement('td'); tdSection.textContent = a.section; tr.appendChild(tdSection);
   var tdDate = document.createElement('td'); tdDate.textContent = a.date || '—'; tr.appendChild(tdDate);
   var tdJour = document.createElement('td'); tdJour.textContent = a.jour || '—'; tr.appendChild(tdJour);
