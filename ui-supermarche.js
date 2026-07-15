@@ -5,6 +5,7 @@ import {
   state, ENGINS_CONFIG, D_FIXED, isoToDisplay, autoResize,
   makeSynthColData, initState, markDirty
 } from './state.js';
+import { sendToAction } from './ui-actions.js';
 
 export function build() {
   buildHeader();
@@ -144,7 +145,7 @@ function buildBody() {
       var tdSS = document.createElement('td'); tdSS.className = 'label'; rScore.appendChild(tdSS);
       for (var d4 = 0; d4 < D_FIXED; d4++) {
         var td4 = document.createElement('td');
-        td4.appendChild(makeScoreInner_fixed(e.id, s, state.colOrder[d4])); rScore.appendChild(td4);
+        td4.appendChild(makeScoreInner_fixed(e.id, s, state.colOrder[d4], d4)); rScore.appendChild(td4);
       }
       state.synthCols.forEach(function (col) {
         var td = document.createElement('td'); td.className = 'synth-cell';
@@ -201,16 +202,45 @@ function makeDot(getVal, setVal, color) {
   btn.onclick = function () { setVal(getVal() === color ? null : color); build(); markDirty(); };
   return btn;
 }
-function makeScoreInner_fixed(eid, s, p) {
+function enginLabelOf(eid) {
+  var cfg = ENGINS_CONFIG.find(function (c) { return c.id === eid; });
+  return state.enginLabels[eid] || (cfg ? cfg.defaultLabel : eid);
+}
+
+// Bouton "→" : envoie une copie figée de la remarque courante vers l'onglet Actions.
+// Mis en avant (classe "alert") si le point est rouge (NOK).
+function makeActionBtn(getDot, getData) {
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn-action' + (getDot() === 'red' ? ' alert' : '');
+  btn.textContent = '→';
+  btn.title = 'Envoyer vers Actions';
+  btn.onclick = function (e) { e.stopPropagation(); sendToAction(getData()); };
+  return btn;
+}
+
+function makeScoreInner_fixed(eid, s, p, d) {
   var inner = document.createElement('div'); inner.className = 'score-inner';
-  (function (ei, si, pi) {
+  (function (ei, si, pi, di) {
     inner.appendChild(makeDot(function () { return state.S[ei][si][pi].dot; }, function (v) { state.S[ei][si][pi].dot = v; }, 'green'));
     inner.appendChild(makeDot(function () { return state.S[ei][si][pi].dot; }, function (v) { state.S[ei][si][pi].dot = v; }, 'red'));
     var inp = document.createElement('input');
     inp.className = 'score'; inp.type = 'text'; inp.placeholder = '0/0'; inp.value = state.S[ei][si][pi].score;
     inp.oninput = function () { state.S[ei][si][pi].score = inp.value; markDirty(); };
     inner.appendChild(inp);
-  })(eid, s, p);
+    inner.appendChild(makeActionBtn(
+      function () { return state.S[ei][si][pi].dot; },
+      function () {
+        return {
+          engin: enginLabelOf(ei),
+          section: si,
+          date: isoToDisplay(state.headersData.dates[di]) || '',
+          jour: state.headersData.jours[di] || '',
+          texte: state.S[ei][si][pi].note || ''
+        };
+      }
+    ));
+  })(eid, s, p, d);
   return inner;
 }
 function makeScoreInner_synth(col, eid, s) {
@@ -222,6 +252,18 @@ function makeScoreInner_synth(col, eid, s) {
   inp.className = 'score'; inp.type = 'text'; inp.placeholder = '0/0'; inp.value = data.score;
   inp.oninput = function () { data.score = inp.value; markDirty(); };
   inner.appendChild(inp);
+  inner.appendChild(makeActionBtn(
+    function () { return data.dot; },
+    function () {
+      return {
+        engin: enginLabelOf(eid),
+        section: s,
+        date: isoToDisplay(col.date) || '',
+        jour: col.jour || '',
+        texte: data.note || ''
+      };
+    }
+  ));
   return inner;
 }
 
