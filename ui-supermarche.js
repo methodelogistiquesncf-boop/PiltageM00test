@@ -232,7 +232,7 @@ function makeScoreInner_fixed(eid, s, p, d) {
       function () { return state.S[ei][si][pi].dot; },
       function () {
         return {
-          engin: enginLabelOf(ei),
+          engin: state.S[ei].loco[pi] || enginLabelOf(ei),
           section: si,
           date: isoToDisplay(state.headersData.dates[di]) || '',
           jour: state.headersData.jours[di] || '',
@@ -256,7 +256,7 @@ function makeScoreInner_synth(col, eid, s) {
     function () { return data.dot; },
     function () {
       return {
-        engin: enginLabelOf(eid),
+        engin: col.enginData[eid].loco || enginLabelOf(eid),
         section: s,
         date: isoToDisplay(col.date) || '',
         jour: col.jour || '',
