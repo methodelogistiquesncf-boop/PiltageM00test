@@ -17,6 +17,8 @@ export const state = {
   historique: {},
   rassemblement: [],
   showRecus: false,
+  actions: [],
+  showDoneActions: false,
 };
 
 // Remplace en bloc une ou plusieurs propriétés de state (utilisé au chargement
