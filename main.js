@@ -14,7 +14,7 @@ import {
   exportManquantsCSV, printRassemblement
 } from './ui-rassemblement.js';
 import { openStats, closeStats, switchStatsTab } from './stats.js';
-import { buildActions, toggleShowDoneActions } from './ui-actions.js';
+import { buildActions, toggleShowDoneActions, exportActionsCSV } from './ui-actions.js';
 
 // ─── Onglets principaux (Supermarché / Rassemblement / Actions) ─────────────
 function switchMainTab(tab) {
@@ -51,6 +51,7 @@ Object.assign(window, {
   closeStats,
   switchStatsTab,
   toggleShowDoneActions,
+  exportActionsCSV,
 });
 
 // ─── Fermeture des modals au clic sur l'overlay ──────────────────────────────
