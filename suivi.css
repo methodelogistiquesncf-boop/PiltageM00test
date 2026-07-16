@@ -448,6 +448,7 @@ table.users-table td { vertical-align: middle; }
 
 .users-toolbar-top { margin-bottom: 14px; }
 .user-add-form { display: none; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.user-add-prenom, .user-add-nom { min-width: 130px; }
 .user-add-email { min-width: 240px; }
 .user-add-msg { font-size: 12px; color: var(--muted); }
 .user-add-msg.ok  { color: #1a7a3c; font-weight: 600; }
