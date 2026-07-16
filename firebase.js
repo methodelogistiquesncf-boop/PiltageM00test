@@ -142,11 +142,14 @@ export async function loadUsersList() {
 // les rôles, pas seulement les Administrateurs. Les règles Firestore refusant
 // le list() sur la collection users aux non-admins, on échoue silencieusement
 // et on retourne un tableau vide plutôt que de propager l'erreur.
-export async function tryLoadUserEmails() {
+export async function tryLoadUserDirectory() {
   if (!db) return [];
   try {
     var snap = await db.collection('users').orderBy('email').get();
-    return snap.docs.map(function (d) { return d.data().email; }).filter(Boolean);
+    return snap.docs.map(function (d) {
+      var data = d.data();
+      return { email: data.email || '', prenom: data.prenom || '', nom: data.nom || '' };
+    }).filter(function (u) { return u.email; });
   } catch (e) {
     return [];
   }
