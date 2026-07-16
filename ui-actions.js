@@ -24,31 +24,27 @@ function ensureAgentEmailsLoaded() {
   cachedAgentEmails = []; // évite les appels concurrents pendant le chargement
   tryLoadUserEmails().then(function (emails) {
     cachedAgentEmails = emails;
-    populateResponsableDatalist();
   });
 }
 
-// Rôles + emails des comptes + noms déjà saisis dans d'autres actions : le
-// champ reste libre (pas un <select>), la datalist ne fait que suggérer.
+// Rôles + emails des comptes + noms déjà saisis dans d'autres actions,
+// dédupliqués et triés. isRole permet d'afficher un petit badge distinctif
+// dans le menu déroulant custom.
 function buildResponsableOptions() {
-  var set = new Set();
-  ROLES.forEach(function (r) { set.add(r); });
-  cachedAgentEmails.forEach(function (e) { set.add(e); });
+  var seen = new Set();
+  var options = [];
+  ROLES.forEach(function (r) {
+    if (!seen.has(r)) { seen.add(r); options.push({ value: r, isRole: true }); }
+  });
+  cachedAgentEmails.forEach(function (e) {
+    if (e && !seen.has(e)) { seen.add(e); options.push({ value: e, isRole: false }); }
+  });
   state.actions.forEach(function (a) {
-    if (a.responsable && a.responsable.trim()) set.add(a.responsable.trim());
+    var v = a.responsable && a.responsable.trim();
+    if (v && !seen.has(v)) { seen.add(v); options.push({ value: v, isRole: false }); }
   });
-  return Array.from(set).sort(function (a, b) { return a.localeCompare(b, 'fr'); });
-}
-
-function populateResponsableDatalist() {
-  var dl = document.getElementById('responsablesList');
-  if (!dl) return;
-  dl.innerHTML = '';
-  buildResponsableOptions().forEach(function (name) {
-    var opt = document.createElement('option');
-    opt.value = name;
-    dl.appendChild(opt);
-  });
+  options.sort(function (a, b) { return a.value.localeCompare(b.value, 'fr'); });
+  return options;
 }
 
 function makeActionItem(data) {
@@ -165,11 +161,6 @@ export function buildActions() {
   if (!wrap) return;
   wrap.innerHTML = '';
 
-  var datalist = document.createElement('datalist');
-  datalist.id = 'responsablesList';
-  wrap.appendChild(datalist);
-  populateResponsableDatalist();
-
   var list = state.actions.slice();
   if (currentFilterPoste) list = list.filter(function (a) { return a.poste === currentFilterPoste; });
   if (currentFilterSection) list = list.filter(function (a) { return a.section === currentFilterSection; });
@@ -223,6 +214,101 @@ function textInputCell(a, field, placeholder, className, lockableIfAuto) {
   return td;
 }
 
+// Champ "Responsable" : saisie libre + menu déroulant custom stylé (rôles,
+// emails des comptes, noms déjà utilisés). Remplace le <datalist> natif du
+// navigateur, non personnalisable visuellement.
+function buildResponsableCell(a) {
+  var td = document.createElement('td');
+  var box = document.createElement('div');
+  box.className = 'resp-autocomplete';
+
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'action-input';
+  input.placeholder = 'Nom ou rôle...';
+  input.setAttribute('autocomplete', 'off');
+  input.value = a.responsable || '';
+  input.disabled = !!a.done;
+
+  var dropdown = document.createElement('div');
+  dropdown.className = 'resp-autocomplete-dropdown';
+  var activeIndex = -1;
+  var currentItems = [];
+
+  function closeDropdown() {
+    dropdown.classList.remove('open');
+    dropdown.innerHTML = '';
+    activeIndex = -1;
+    currentItems = [];
+  }
+
+  function selectValue(value) {
+    input.value = value;
+    a.responsable = value;
+    markDirty();
+    closeDropdown();
+  }
+
+  function setActive(idx) {
+    currentItems.forEach(function (el, i) { el.classList.toggle('active', i === idx); });
+    activeIndex = idx;
+  }
+
+  function openDropdown() {
+    var q = input.value.trim().toLowerCase();
+    var options = buildResponsableOptions();
+    var filtered = q ? options.filter(function (o) { return o.value.toLowerCase().indexOf(q) !== -1; }) : options;
+
+    dropdown.innerHTML = '';
+    currentItems = [];
+    if (filtered.length === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'resp-autocomplete-empty';
+      empty.textContent = 'Aucune suggestion — le nom saisi sera conservé tel quel.';
+      dropdown.appendChild(empty);
+      dropdown.classList.add('open');
+      return;
+    }
+    filtered.slice(0, 40).forEach(function (opt) {
+      var item = document.createElement('div');
+      item.className = 'resp-autocomplete-item';
+      var label = document.createElement('span');
+      label.textContent = opt.value;
+      item.appendChild(label);
+      if (opt.isRole) {
+        var tag = document.createElement('span');
+        tag.className = 'resp-tag-role';
+        tag.textContent = 'Rôle';
+        item.appendChild(tag);
+      }
+      item.onmousedown = function (e) { e.preventDefault(); selectValue(opt.value); };
+      dropdown.appendChild(item);
+      currentItems.push(item);
+    });
+    dropdown.classList.add('open');
+  }
+
+  input.oninput = function () {
+    a.responsable = input.value;
+    markDirty();
+    openDropdown();
+  };
+  input.onfocus = function () { if (!input.disabled) openDropdown(); };
+  input.onblur = function () { closeDropdown(); };
+  input.onkeydown = function (e) {
+    if (!dropdown.classList.contains('open')) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive(Math.min(activeIndex + 1, currentItems.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(Math.max(activeIndex - 1, 0)); }
+    else if (e.key === 'Enter') { if (activeIndex >= 0 && currentItems[activeIndex]) { e.preventDefault(); currentItems[activeIndex].onmousedown(e); } }
+    else if (e.key === 'Escape') { closeDropdown(); input.blur(); }
+  };
+
+  box.appendChild(input);
+  box.appendChild(dropdown);
+  td.appendChild(box);
+  return td;
+}
+
 function buildActionRow(a) {
   var tr = document.createElement('tr');
   var isOverdue = !a.done && a.echeance && a.echeance < todayISO();
@@ -237,16 +323,7 @@ function buildActionRow(a) {
   tr.appendChild(textInputCell(a, 'texte', 'Action...', 'action-input action-texte-input', true));
   tr.appendChild(textInputCell(a, 'commentaire', 'Commentaire...'));
 
-  var tdResp = document.createElement('td');
-  var respInput = document.createElement('input');
-  respInput.type = 'text'; respInput.className = 'action-input'; respInput.placeholder = 'Nom ou rôle...';
-  respInput.setAttribute('list', 'responsablesList');
-  respInput.setAttribute('autocomplete', 'off');
-  respInput.value = a.responsable || '';
-  respInput.disabled = !!a.done;
-  respInput.oninput = function () { a.responsable = respInput.value; markDirty(); };
-  tdResp.appendChild(respInput);
-  tr.appendChild(tdResp);
+  tr.appendChild(buildResponsableCell(a));
 
   var tdEch = document.createElement('td');
   var echInput = document.createElement('input');
