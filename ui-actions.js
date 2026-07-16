@@ -1,9 +1,10 @@
 // ui-actions.js — onglet "Actions" : liste des remarques envoyées depuis le tableau
 // Supermarché (bouton "→" sur les cellules score / lignes de remarque), avec
 // statut Fait / Pas fait, responsable, échéance, filtres et export CSV.
+// Les actions peuvent aussi être créées manuellement via "+ Ajouter une action".
 //
 // Une action est une COPIE FIGÉE de la remarque au moment de l'envoi (Engin, Section,
-// Date, Repère, Texte). Elle vit indépendamment des cellules du tableau : elle ne
+// Date, Texte). Elle vit indépendamment des cellules du tableau : elle ne
 // disparaît donc pas quand la case d'origine est réutilisée le lendemain.
 
 import { state, markDirty, todayISO } from './state.js';
@@ -19,8 +20,8 @@ function makeActionItem(data) {
     poste: data.poste || '',
     section: data.section || '',
     date: data.date || '',
-    jour: data.jour || '',
     texte: data.texte || '',
+    commentaire: data.commentaire || '',
     responsable: '',
     echeance: '',
     done: false,
@@ -42,6 +43,16 @@ export function sendToAction(data) {
   if (doublon) { buildActions(); return; }
 
   state.actions.push(makeActionItem(data));
+  buildActions();
+  markDirty();
+}
+
+// Appelée par le bouton "+ Ajouter une action" : crée une ligne vide, entièrement
+// éditable directement dans le tableau (contrairement aux actions envoyées depuis
+// le Supermarché, ici tous les champs sont saisis à la main).
+export function addManualAction() {
+  var item = makeActionItem({ date: todayISO() });
+  state.actions.unshift(item);
   buildActions();
   markDirty();
 }
@@ -127,7 +138,7 @@ export function buildActions() {
 
   if (list.length === 0) {
     var msg = state.actions.length === 0
-      ? 'Aucune action pour le moment. Utilise le bouton « → » sur une remarque du tableau Supermarché pour en créer une.'
+      ? 'Aucune action pour le moment. Utilise le bouton « → » sur une remarque du tableau Supermarché, ou « + Ajouter une action » pour en créer une manuellement.'
       : (currentFilterPoste || currentFilterSection)
         ? 'Aucune action ne correspond aux filtres sélectionnés.'
         : 'Toutes les actions sont faites. « Afficher les faites » pour les revoir.';
@@ -138,8 +149,8 @@ export function buildActions() {
   var table = document.createElement('table');
   table.className = 'actions-table';
   var thead = document.createElement('thead');
-  thead.innerHTML = '<tr><th>Engin</th><th>Poste</th><th>Section</th><th>Date</th><th>Repère</th>' +
-    '<th>Action</th><th>Responsable</th><th>Échéance</th><th>Fait</th><th></th></tr>';
+  thead.innerHTML = '<tr><th>Engin</th><th>Poste</th><th>Section</th><th>Date</th>' +
+    '<th>Action</th><th>Commentaire</th><th>Responsable</th><th>Échéance</th><th>Fait</th><th></th></tr>';
   table.appendChild(thead);
 
   var tbody = document.createElement('tbody');
@@ -148,18 +159,41 @@ export function buildActions() {
   wrap.appendChild(table);
 }
 
+function textInputCell(a, field, placeholder, className) {
+  var td = document.createElement('td');
+  var inp = document.createElement('input');
+  inp.type = 'text';
+  inp.className = className || 'action-input';
+  if (placeholder) inp.placeholder = placeholder;
+  inp.value = a[field] || '';
+  inp.disabled = !!a.done;
+  inp.oninput = function () { a[field] = inp.value; markDirty(); };
+  td.appendChild(inp);
+  return td;
+}
+
 function buildActionRow(a) {
   var tr = document.createElement('tr');
   var isOverdue = !a.done && a.echeance && a.echeance < todayISO();
   if (a.done) tr.className = 'action-done';
   else if (isOverdue) tr.className = 'action-overdue';
 
-  var tdEngin = document.createElement('td'); tdEngin.textContent = a.engin; tr.appendChild(tdEngin);
-  var tdPoste = document.createElement('td'); tdPoste.textContent = a.poste || '—'; tr.appendChild(tdPoste);
-  var tdSection = document.createElement('td'); tdSection.textContent = a.section; tr.appendChild(tdSection);
-  var tdDate = document.createElement('td'); tdDate.textContent = a.date || '—'; tr.appendChild(tdDate);
-  var tdJour = document.createElement('td'); tdJour.textContent = a.jour || '—'; tr.appendChild(tdJour);
-  var tdTexte = document.createElement('td'); tdTexte.className = 'action-texte'; tdTexte.textContent = a.texte; tr.appendChild(tdTexte);
+  tr.appendChild(textInputCell(a, 'engin', 'Engin...'));
+  tr.appendChild(textInputCell(a, 'poste', 'Poste...'));
+  tr.appendChild(textInputCell(a, 'section', 'Section...'));
+
+  var tdDate = document.createElement('td');
+  var dateInput = document.createElement('input');
+  dateInput.type = 'date';
+  dateInput.className = 'action-input action-date-input';
+  dateInput.value = a.date || '';
+  dateInput.disabled = !!a.done;
+  dateInput.onchange = function () { a.date = dateInput.value; markDirty(); };
+  tdDate.appendChild(dateInput);
+  tr.appendChild(tdDate);
+
+  tr.appendChild(textInputCell(a, 'texte', 'Action...', 'action-input action-texte-input'));
+  tr.appendChild(textInputCell(a, 'commentaire', 'Commentaire...'));
 
   var tdResp = document.createElement('td');
   var respInput = document.createElement('input');
@@ -209,10 +243,11 @@ function buildActionRow(a) {
 
 // ─── Export CSV ─────────────────────────────────────────────────────────────
 export function exportActionsCSV() {
-  var rows = [['Engin', 'Poste', 'Section', 'Date remarque', 'Repère', 'Action', 'Responsable', 'Échéance', 'Statut']];
+  var rows = [['Engin', 'Poste', 'Section', 'Date', 'Action', 'Commentaire', 'Responsable', 'Échéance', 'Statut']];
   state.actions.forEach(function (a) {
     var echAff = a.echeance ? a.echeance.split('-').reverse().join('/') : '';
-    rows.push([a.engin, a.poste, a.section, a.date, a.jour, a.texte, a.responsable || '', echAff, a.done ? 'Fait' : 'À faire']);
+    var dateAff = a.date ? a.date.split('-').reverse().join('/') : '';
+    rows.push([a.engin, a.poste, a.section, dateAff, a.texte, a.commentaire || '', a.responsable || '', echAff, a.done ? 'Fait' : 'À faire']);
   });
   var csv = '\ufeff' + rows.map(function (r) { return r.map(function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(';'); }).join('\n');
   var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
