@@ -7,11 +7,49 @@
 // Date, Texte). Elle vit indépendamment des cellules du tableau : elle ne
 // disparaît donc pas quand la case d'origine est réutilisée le lendemain.
 
-import { state, markDirty, todayISO, isoToDisplay, showConfirm } from './state.js';
+import { state, markDirty, todayISO, isoToDisplay, showConfirm, ROLES } from './state.js';
+import { tryLoadUserEmails } from './firebase.js';
 
 // Filtres de vue (état d'affichage uniquement, pas persisté)
 var currentFilterPoste = '';
 var currentFilterSection = '';
+
+// ─── Suggestions pour le champ "Responsable" ───────────────────────────────
+// null = pas encore chargé, tableau = chargé (éventuellement vide si les
+// règles Firestore refusent le list() aux comptes non-Administrateur).
+var cachedAgentEmails = null;
+
+function ensureAgentEmailsLoaded() {
+  if (cachedAgentEmails !== null) return;
+  cachedAgentEmails = []; // évite les appels concurrents pendant le chargement
+  tryLoadUserEmails().then(function (emails) {
+    cachedAgentEmails = emails;
+    populateResponsableDatalist();
+  });
+}
+
+// Rôles + emails des comptes + noms déjà saisis dans d'autres actions : le
+// champ reste libre (pas un <select>), la datalist ne fait que suggérer.
+function buildResponsableOptions() {
+  var set = new Set();
+  ROLES.forEach(function (r) { set.add(r); });
+  cachedAgentEmails.forEach(function (e) { set.add(e); });
+  state.actions.forEach(function (a) {
+    if (a.responsable && a.responsable.trim()) set.add(a.responsable.trim());
+  });
+  return Array.from(set).sort(function (a, b) { return a.localeCompare(b, 'fr'); });
+}
+
+function populateResponsableDatalist() {
+  var dl = document.getElementById('responsablesList');
+  if (!dl) return;
+  dl.innerHTML = '';
+  buildResponsableOptions().forEach(function (name) {
+    var opt = document.createElement('option');
+    opt.value = name;
+    dl.appendChild(opt);
+  });
+}
 
 function makeActionItem(data) {
   return {
@@ -121,10 +159,16 @@ function setupFilters() {
 export function buildActions() {
   updateActionsCount();
   setupFilters();
+  ensureAgentEmailsLoaded();
 
   var wrap = document.getElementById('actionsTableWrap');
   if (!wrap) return;
   wrap.innerHTML = '';
+
+  var datalist = document.createElement('datalist');
+  datalist.id = 'responsablesList';
+  wrap.appendChild(datalist);
+  populateResponsableDatalist();
 
   var list = state.actions.slice();
   if (currentFilterPoste) list = list.filter(function (a) { return a.poste === currentFilterPoste; });
@@ -144,7 +188,10 @@ export function buildActions() {
       : (currentFilterPoste || currentFilterSection)
         ? 'Aucune action ne correspond aux filtres sélectionnés.'
         : 'Toutes les actions sont faites. « Afficher les faites » pour les revoir.';
-    wrap.innerHTML = '<div class="manquants-empty">' + msg + '</div>';
+    var emptyDiv = document.createElement('div');
+    emptyDiv.className = 'manquants-empty';
+    emptyDiv.textContent = msg;
+    wrap.appendChild(emptyDiv);
     return;
   }
 
@@ -192,7 +239,9 @@ function buildActionRow(a) {
 
   var tdResp = document.createElement('td');
   var respInput = document.createElement('input');
-  respInput.type = 'text'; respInput.className = 'action-input'; respInput.placeholder = 'Nom...';
+  respInput.type = 'text'; respInput.className = 'action-input'; respInput.placeholder = 'Nom ou rôle...';
+  respInput.setAttribute('list', 'responsablesList');
+  respInput.setAttribute('autocomplete', 'off');
   respInput.value = a.responsable || '';
   respInput.disabled = !!a.done;
   respInput.oninput = function () { a.responsable = respInput.value; markDirty(); };
