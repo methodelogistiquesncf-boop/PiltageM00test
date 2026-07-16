@@ -9,7 +9,7 @@
 
 import { state } from './state.js';
 import { ROLES } from './state.js';
-import { loadUsersList, updateUserRole, createUser } from './firebase.js';
+import { loadUsersList, updateUserRole, createUser, deleteUserDoc } from './firebase.js';
 
 let cachedUsers = [];
 
@@ -122,6 +122,19 @@ function buildAddUserForm() {
   return box;
 }
 
+// Supprime la fiche d'un utilisateur après confirmation. On ne peut pas se
+// supprimer soi-même (le bouton est désactivé dans buildUserRow pour ce cas).
+function removeUser(u) {
+  if (!confirm('Supprimer la fiche de ' + (u.email || u.uid) + ' ?\n\nSon rôle sera retiré. Si cette personne se reconnecte, elle réapparaîtra dans la liste sans rôle.')) return;
+  deleteUserDoc(u.uid).then(function () {
+    cachedUsers = cachedUsers.filter(function (x) { return x.uid !== u.uid; });
+    renderUsersTable();
+  }).catch(function (e) {
+    console.error(e);
+    alert('Erreur lors de la suppression de la fiche.');
+  });
+}
+
 function renderUsersTable() {
   var wrap = document.getElementById('usersTableZone');
   if (!wrap) return;
@@ -135,7 +148,7 @@ function renderUsersTable() {
   var table = document.createElement('table');
   table.className = 'actions-table users-table';
   var thead = document.createElement('thead');
-  thead.innerHTML = '<tr><th>Utilisateur</th><th>Rôle</th><th>Dernière connexion</th></tr>';
+  thead.innerHTML = '<tr><th>Utilisateur</th><th>Rôle</th><th>Dernière connexion</th><th></th></tr>';
   table.appendChild(thead);
 
   var tbody = document.createElement('tbody');
@@ -195,6 +208,18 @@ function buildUserRow(u) {
   var tdLast = document.createElement('td');
   tdLast.textContent = u.lastLogin ? new Date(u.lastLogin).toLocaleString('fr-FR') : '—';
   tr.appendChild(tdLast);
+
+  var tdDel = document.createElement('td');
+  tdDel.style.textAlign = 'center';
+  var isSelf = u.uid === state.currentUserUid;
+  var delBtn = document.createElement('button');
+  delBtn.className = 'actions-del-btn';
+  delBtn.textContent = '✕';
+  delBtn.title = isSelf ? 'Impossible de supprimer sa propre fiche' : 'Supprimer cette fiche';
+  delBtn.disabled = isSelf;
+  delBtn.onclick = function () { removeUser(u); };
+  tdDel.appendChild(delBtn);
+  tr.appendChild(tdDel);
 
   return tr;
 }
