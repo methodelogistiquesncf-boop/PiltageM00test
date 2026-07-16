@@ -9,7 +9,7 @@
 
 import { state } from './state.js';
 import { ROLES } from './state.js';
-import { loadUsersList, updateUserRole, createUser, deleteUserDoc } from './firebase.js';
+import { loadUsersList, updateUserRole, updateUserProfile, createUser, deleteUserDoc } from './firebase.js';
 
 let cachedUsers = [];
 
@@ -57,6 +57,16 @@ function buildAddUserForm() {
   form.className = 'user-add-form';
   form.style.display = 'none';
 
+  var prenomInput = document.createElement('input');
+  prenomInput.type = 'text';
+  prenomInput.className = 'action-input user-add-prenom';
+  prenomInput.placeholder = 'Prénom';
+
+  var nomInput = document.createElement('input');
+  nomInput.type = 'text';
+  nomInput.className = 'action-input user-add-nom';
+  nomInput.placeholder = 'Nom';
+
   var emailInput = document.createElement('input');
   emailInput.type = 'email';
   emailInput.className = 'action-input user-add-email';
@@ -82,7 +92,7 @@ function buildAddUserForm() {
   toggleBtn.onclick = function () {
     var show = form.style.display === 'none';
     form.style.display = show ? 'flex' : 'none';
-    if (show) emailInput.focus();
+    if (show) prenomInput.focus();
   };
 
   submitBtn.onclick = function () {
@@ -91,9 +101,11 @@ function buildAddUserForm() {
     submitBtn.disabled = true;
     msg.className = 'user-add-msg';
     msg.textContent = 'Création en cours...';
-    createUser(email, roleSelect.value).then(function () {
+    createUser(email, roleSelect.value, prenomInput.value, nomInput.value).then(function () {
       msg.className = 'user-add-msg ok';
       msg.textContent = '✓ Compte créé — e-mail de définition du mot de passe envoyé à ' + email + '.';
+      prenomInput.value = '';
+      nomInput.value = '';
       emailInput.value = '';
       roleSelect.value = '';
       buildUsers();
@@ -112,6 +124,8 @@ function buildAddUserForm() {
     });
   };
 
+  form.appendChild(prenomInput);
+  form.appendChild(nomInput);
   form.appendChild(emailInput);
   form.appendChild(roleSelect);
   form.appendChild(submitBtn);
@@ -148,18 +162,50 @@ function renderUsersTable() {
   var table = document.createElement('table');
   table.className = 'actions-table users-table';
   var thead = document.createElement('thead');
-  thead.innerHTML = '<tr><th>Utilisateur</th><th>Rôle</th><th>Dernière connexion</th><th></th></tr>';
+  thead.innerHTML = '<tr><th>Prénom</th><th>Nom</th><th>Utilisateur</th><th>Rôle</th><th>Dernière connexion</th><th></th></tr>';
   table.appendChild(thead);
 
   var tbody = document.createElement('tbody');
-  cachedUsers.slice().sort(function (a, b) { return (a.email || '').localeCompare(b.email || ''); })
-    .forEach(function (u) { tbody.appendChild(buildUserRow(u)); });
+  cachedUsers.slice().sort(function (a, b) {
+    var na = ((a.nom || '') + (a.prenom || '')) || a.email || '';
+    var nb = ((b.nom || '') + (b.prenom || '')) || b.email || '';
+    return na.localeCompare(nb, 'fr');
+  }).forEach(function (u) { tbody.appendChild(buildUserRow(u)); });
   table.appendChild(tbody);
   wrap.appendChild(table);
 }
 
+// Champ texte éditable (Prénom / Nom), sauvegardé sur Firestore au blur.
+function editableNameCell(u, field, placeholder) {
+  var td = document.createElement('td');
+  var inp = document.createElement('input');
+  inp.type = 'text';
+  inp.className = 'action-input';
+  inp.placeholder = placeholder;
+  inp.value = u[field] || '';
+  inp.oninput = function () { u[field] = inp.value; };
+  inp.onblur = function () {
+    var value = inp.value.trim();
+    if (value === (u[field] || '')) return;
+    var previous = u[field] || '';
+    u[field] = value;
+    var patch = {}; patch[field] = value;
+    updateUserProfile(u.uid, patch).catch(function (e) {
+      console.error(e);
+      u[field] = previous;
+      inp.value = previous;
+      alert('Erreur lors de la mise à jour.');
+    });
+  };
+  td.appendChild(inp);
+  return td;
+}
+
 function buildUserRow(u) {
   var tr = document.createElement('tr');
+
+  tr.appendChild(editableNameCell(u, 'prenom', 'Prénom...'));
+  tr.appendChild(editableNameCell(u, 'nom', 'Nom...'));
 
   var tdEmail = document.createElement('td');
   tdEmail.textContent = u.email || u.uid;
