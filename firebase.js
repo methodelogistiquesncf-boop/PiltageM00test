@@ -139,6 +139,14 @@ export async function updateUserRole(uid, role) {
   if (uid === state.currentUserUid) state.currentUserRole = role;
 }
 
+// Supprime la fiche Firestore d'un utilisateur (son rôle et ses infos).
+// Ne supprime PAS son compte de connexion Firebase Authentication : si la
+// personne se reconnecte ensuite, sa fiche est recréée automatiquement (sans
+// rôle) par ensureUserDoc, comme pour tout nouvel utilisateur.
+export async function deleteUserDoc(uid) {
+  await db.collection('users').doc(uid).delete();
+}
+
 export async function loadFirebase() {
   try {
     var parts = FIRESTORE_DOC.split('/');
